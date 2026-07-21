@@ -1,0 +1,44 @@
+{
+  "name": "npm-check",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "entry point": "src/index.ts",
+  "bin": {
+    "npm-check": "./bin/npm-check.js"
+  },
+  "files": ["dist", "bin"],
+  "scripts": {
+      "build": "bun build ./src/index.ts --outdir ./dist --target node",
+      "check": "node ./bin/npm-check.js",
+      "prepare": "bun run build",
+      "prepublishOnly": "bun run build"
+  },
+  "keywords" : [
+    "npm",
+    "check",
+    "dependencies",
+    "vulnerabilities",
+    "security"
+  ],
+  "author": "Ankur Singh",
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "figlet": "^1.11.2",
+    "inquirer": "^14.0.2",
+    "listr": "^0.14.3",
+    "execa": "^9.6.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/figlet": "^1.5.2",
+    "@types/inquirer": "^9.0.0",
+    "@types/listr": "^0.14.1",
+    "@types/execa": "^2.0.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

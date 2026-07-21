@@ -12,6 +12,7 @@
   "scripts": {
       "build": "bun build ./src/index.ts --outdir ./dist --target node",
       "check": "node ./bin/npm-check.js",
+      "test": "bun test",
       "prepare": "bun run build",
       "prepublishOnly": "bun run build"
   },

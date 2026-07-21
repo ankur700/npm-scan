@@ -369,7 +369,7 @@ class Scanner {
     const directPackages = reportResults.filter(r => r.dependencyType === 'direct');
     const transitivePackages = reportResults.filter(r => r.dependencyType === 'transitive');
 
-    console.log(chalk.bold('\n=== DEPENDENCY SCAN REPORT ===\n'));
+    console.log(chalk.bold('\n REPORT \n'));
     console.log(chalk.green(`Total packages included in report: ${reportResults.length}`));
     console.log(`  - Direct dependencies: ${directPackages.length}`);
     console.log(`  - Transitive dependencies: ${transitivePackages.length}`);

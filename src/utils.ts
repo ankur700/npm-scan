@@ -156,7 +156,7 @@ export function parsePnpmLockfile(lockFilePath: string): DependenciesMap {
     const content = fs.readFileSync(lockFilePath, 'utf8');
     const allPackages: DependenciesMap = {};
 
-    const packagesMatch = content.match(/^packages:\n([\s\S]*?)(?=^[a-z]|\Z)/m);
+    const packagesMatch = content.match(/packages:\s*\n([\s\S]*?)(?=\n[^\s#]|\s*$)/);
     if (!packagesMatch?.[1]) {
       return allPackages;
     }

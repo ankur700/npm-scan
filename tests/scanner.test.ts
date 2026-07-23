@@ -11,7 +11,7 @@ describe('Scanner', () => {
   let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-check-scanner-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-scan-scanner-test-'));
     scanner = new Scanner();
     originalFetch = global.fetch;
   });
@@ -171,12 +171,12 @@ describe('Scanner', () => {
 
   describe('API integration methods with mock fetch', () => {
     test('getVersionInfo fetches version data from API', async () => {
-      global.fetch = mock(async () => {
+      global.fetch = mock(async (..._args: Parameters<typeof fetch>) => {
         return {
           ok: true,
           json: async () => ({ publishedAt: '2023-06-15T00:00:00Z', isDefault: true })
-        } as any;
-      });
+        } as Response;
+      }) as unknown as typeof fetch;
 
       const info = await scanner.getVersionInfo('chalk', '5.3.0');
       expect(info).toEqual({ publishedAt: '2023-06-15T00:00:00Z', isDefault: true });
@@ -189,7 +189,7 @@ describe('Scanner', () => {
           return {
             ok: true,
             json: async () => ({ advisoryKeys: [{ id: 'GHSA-TEST-1234' }] })
-          } as any;
+          } as Response;
         } else if (urlStr.includes('/advisories/')) {
           return {
             ok: true,
@@ -199,10 +199,10 @@ describe('Scanner', () => {
               cvss3Score: 7.5,
               overview: 'Overview details'
             })
-          } as any;
+          } as Response;
         }
-        return { ok: false } as any;
-      });
+        return { ok: false } as Response;
+      }) as unknown as typeof fetch;
 
       const vulns = await scanner.getVulnerabilities('test-pkg', '1.0.0');
       expect(vulns.length).toBe(1);
@@ -216,12 +216,12 @@ describe('Scanner', () => {
     });
 
     test('getAllVersions fetches version list', async () => {
-      global.fetch = mock(async () => {
+      global.fetch = mock(async (..._args: Parameters<typeof fetch>) => {
         return {
           ok: true,
           json: async () => ({ versions: ['1.0.0', '2.0.0', '3.0.0'] })
-        } as any;
-      });
+        } as Response;
+      }) as unknown as typeof fetch;
 
       const versions = await scanner.getAllVersions('chalk');
       expect(versions).toEqual(['1.0.0', '2.0.0', '3.0.0']);

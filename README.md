@@ -1,15 +1,16 @@
-# npm-check
+# npm-scan
 
 > An interactive, multi-package-manager dependency security scanner for Node.js and Bun projects.
 
-`npm-check` is a powerful command-line tool designed to audit project dependencies for known security vulnerabilities (CVEs), track published dates, separate direct dependencies from transitive dependencies, and export detailed JSON security reports.
+`npm-scan` is a powerful command-line tool designed to audit project dependencies for known security vulnerabilities (CVEs), track published dates, separate direct dependencies from transitive dependencies, and export detailed JSON security reports.
 
-Powered by Google's **Open Source Insights API** (`deps.dev`), `npm-check` provides real-time vulnerability data, CVSS v3 severity scores, and dependency breakdown across `npm`, `yarn`, `pnpm`, and `bun`.
+Powered by Google's **Open Source Insights API** (`deps.dev`), `npm-scan` provides real-time vulnerability data, CVSS v3 severity scores, and dependency breakdown across `npm`, `yarn`, `pnpm`, and `bun`.
 
 ---
 
 ## ✨ Features
 
+- 🌐 **GitHub Repo & Folder Scanning**: Scan any public/accessible GitHub repository URL or any absolute/relative local directory path (`file://`, `/path/to/project`) without needing to navigate into the folder.
 - 🔍 **Vulnerability Scanning**: Fetches up-to-date security advisories, CVSS v3 scores, and vulnerability titles using the `deps.dev` API.
 - 🎯 **Direct vs. Transitive Detection**: Automatically categorizes packages as **🎯 DIRECT** (`dependencies` / `devDependencies`) or **🔗 TRANSITIVE** (nested sub-dependencies).
 - 🗃️ **Multi-Package Manager Support**: Seamlessly detects and parses:
@@ -18,9 +19,9 @@ Powered by Google's **Open Source Insights API** (`deps.dev`), `npm-check` provi
   - **pnpm** (`pnpm-lock.yaml`)
   - **Bun** (`bun.lockb` / `package.json` fallback)
 - 💬 **Interactive & Non-Interactive CLI**:
-  - **Interactive Mode**: Guided terminal prompts using `inquirer` for command selection, cache clearing, and report saving.
+  - **Interactive Mode**: Guided terminal prompts using `inquirer` for command selection, target folder/URL input, cache clearing, and report saving.
   - **Scripting Mode**: Command-line subcommands and flags for automated execution in CI/CD pipelines.
-- ⚡ **Smart SHA-256 Caching**: Computes lockfile SHA-256 fingerprints to cache API responses locally (`.npm-check-cache.json`), preventing redundant network requests.
+- ⚡ **Smart SHA-256 Caching**: Computes lockfile SHA-256 fingerprints to cache API responses locally (`.npm-scan-cache.json`), preventing redundant network requests.
 - 📄 **Exportable Security Reports**: Saves complete or filtered vulnerability reports as structured JSON files for auditing.
 - 📅 **Dependency Insights**: Identifies the oldest installed packages to help address technical debt.
 
@@ -32,30 +33,30 @@ Powered by Google's **Open Source Insights API** (`deps.dev`), `npm-check` provi
 
 Using **npm**:
 ```bash
-npm install -g npm-check
+npm install -g npm-scan
 ```
 
 Using **bun**:
 ```bash
-bun install -g npm-check
+bun install -g npm-scan
 ```
 
 Using **yarn**:
 ```bash
-yarn global add npm-check
+yarn global add npm-scan
 ```
 
 Using **pnpm**:
 ```bash
-pnpm add -g npm-check
+pnpm add -g npm-scan
 ```
 
 ### Direct Execution (Without Installing)
 
 ```bash
-npx npm-check
+npx npm-scan
 # or
-bunx npm-check
+bunx npm-scan
 ```
 
 ---
@@ -64,10 +65,10 @@ bunx npm-check
 
 ### 1. Interactive Mode
 
-Run `npm-check` without any arguments to launch the interactive prompt wizard:
+Run `npm-scan` without any arguments to launch the interactive prompt wizard:
 
 ```bash
-npm-check
+npm-scan
 ```
 
 You will be presented with a menu to:
@@ -76,16 +77,17 @@ You will be presented with a menu to:
    - `List all installed packages and report`: Displays all installed packages across the lockfile.
    - `Generate report for vulnerable packages`: Scans and isolates packages with active security advisories.
    - `Show help`: Displays usage guidance.
-2. **Clear cache** option.
-3. **Direct dependencies only** toggle.
-4. **Save report to disk** prompt with custom filename selection.
+2. **Target repository or folder**: Enter a GitHub repo URL (e.g. `https://github.com/expressjs/express`) or local project directory path / `file://` URL (leave blank for current directory).
+3. **Clear cache** option.
+4. **Direct dependencies only** toggle.
+5. **Save report to disk** prompt with custom filename selection.
 
 ---
 
-### 2. Command Line Interface (CLI)
+## 2. Command Line Interface (CLI)
 
 ```bash
-npm-check <command> [options]
+npm-scan <command> [options] [url|path]
 ```
 
 #### Available Commands
@@ -103,10 +105,11 @@ npm-check <command> [options]
 
 | Flag | Short / Alias | Description | Default |
 | :--- | :--- | :--- | :--- |
+| `--url <url\|path>` | `-u`, `--path`, `-p` | GitHub repo URL or local project folder path / `file://` URL. | Current directory (`.`) |
 | `--direct-only` | | Restricts scan to direct dependencies in `package.json`. | `false` |
 | `--full` | | Includes all direct and transitive dependencies in the scan. | `true` (for `scan`) |
 | `--clear-cache` | `--invalidate-cache` | Clears local cache before running the scan. | `false` |
-| `--cache-file <path>` | | Path to custom cache file. | `.npm-check-cache.json` |
+| `--cache-file <path>` | | Path to custom cache file. | `.npm-scan-cache.json` |
 | `--save [filename]` | | Saves the scan report to a JSON file on disk. | `security-scan.json` |
 | `--help` | `-h` | Shows usage instructions and exit. | |
 
@@ -114,36 +117,49 @@ npm-check <command> [options]
 
 ## 💡 Examples
 
+#### Scan a GitHub repository
+```bash
+npm-scan scan --url https://github.com/expressjs/express
+# or positional URL
+npm-scan https://github.com/expressjs/express
+```
+
+#### Scan a local project directory or file URL
+```bash
+npm-scan scan --url /Users/ankur/projects/my-app
+npm-scan scan --url file:///Users/ankur/projects/my-app
+```
+
 #### Scan direct dependencies only
 ```bash
-npm-check scan --direct-only
+npm-scan scan --direct-only
 ```
 
 #### Scan all dependencies (full transitive tree) and clear cache
 ```bash
-npm-check scan --full --clear-cache
+npm-scan scan --full --clear-cache
 ```
 
-#### Generate a vulnerability report and save to JSON
+#### Generate a vulnerability report for a remote repo and save to JSON
 ```bash
-npm-check generate-report --save audit-report.json
+npm-scan generate-report --url https://github.com/facebook/react --save report.json
 ```
 
 #### Use a custom cache file location
 ```bash
-npm-check scan --cache-file .cache/security-cache.json
+npm-scan scan --cache-file .cache/security-cache.json
 ```
 
 #### List all installed packages in project lockfile
 ```bash
-npm-check all-installed
+npm-scan all-installed
 ```
 
 ---
 
 ## 📊 JSON Report Output Format
 
-When using `--save` or confirming save in interactive mode, `npm-check` generates a structured JSON report:
+When using `--save` or confirming save in interactive mode, `npm-scan` generates a structured JSON report:
 
 ```json
 {
@@ -182,11 +198,11 @@ When using `--save` or confirming save in interactive mode, `npm-check` generate
 
 ## 💻 Programmatic Usage (TypeScript / Node.js API)
 
-`npm-check` exports the `Scanner` class and `main` function for programmatic use in Node.js or TypeScript projects:
+`npm-scan` exports the `Scanner` class and `main` function for programmatic use in Node.js or TypeScript projects:
 
 ```typescript
-import Scanner from 'npm-check';
-import type { DependencyResult } from 'npm-check/dist/types';
+import Scanner from 'npm-scan';
+import type { DependencyResult } from 'npm-scan/dist/types';
 
 const scanner = new Scanner();
 
@@ -215,8 +231,8 @@ scanner.saveResults(results, 'security-report.json');
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/ankur700/npm-check.git
-   cd npm-check
+   git clone https://github.com/ankur700/npm-scan.git
+   cd npm-scan
    ```
 
 2. **Install dependencies**:
@@ -238,22 +254,22 @@ scanner.saveResults(results, 'security-report.json');
    ```bash
    bun run check
    # or
-   node ./bin/npm-check.js help
+   node ./bin/npm-scan.js help
    ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/ankur700/npm-check/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/ankur700/npm-scan/issues).
 
 ### How to Contribute
 
 1. **Fork the Repository**: Click the **Fork** button at the top right of the GitHub repository page.
 2. **Clone Your Fork**:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/npm-check.git
-   cd npm-check
+   git clone https://github.com/YOUR-USERNAME/npm-scan.git
+   cd npm-scan
    ```
 3. **Create a Working Branch**:
    ```bash
@@ -282,7 +298,7 @@ Contributions, issues, and feature requests are welcome! Feel free to check the 
    ```bash
    git push origin feature/amazing-feature
    ```
-9. **Submit a Pull Request (PR)**: Open a PR against the `main` branch of `ankur700/npm-check` explaining your changes and motivation.
+9. **Submit a Pull Request (PR)**: Open a PR against the `main` branch of `ankur700/npm-scan` explaining your changes and motivation.
 
 ### Guidelines
 

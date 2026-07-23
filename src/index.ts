@@ -23,10 +23,9 @@ import {
   parseYarnLockfile,
   parseBunLockfile,
   parseCliArgs,
-  showHelp
+  showHelp,
+  resolveTarget
 } from './utils';
-
-
 
 class Scanner {
   private baseUrl: string;
@@ -41,7 +40,7 @@ class Scanner {
   }
 
   private getDefaultCachePath(projectPath: string = '.'): string {
-    return path.resolve(projectPath, '.npm-check-cache.json');
+    return path.resolve(projectPath, '.npm-scan-cache.json');
   }
 
   private getLockfileFingerprint(projectPath: string = '.'): string {
@@ -197,7 +196,7 @@ class Scanner {
     } catch (error) {
       console.warn(`Warning: Could not read lock file: ${error instanceof Error ? error.message : String(error)}`);
       console.warn('Falling back to package.json dependencies only');
-      return this.getDependencies();
+      return this.getDependencies(path.join(baseDir, 'package.json'));
     }
   }
 
@@ -431,7 +430,7 @@ class Scanner {
         vulnerableDirect: vulnerablePackages.filter(r => r.dependencyType === 'direct').length,
         vulnerableTransitive: vulnerablePackages.filter(r => r.dependencyType === 'transitive').length
       },
-      results
+      results,
     };
 
     fs.writeFileSync(filename, JSON.stringify(report, null, 2));
@@ -456,105 +455,115 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
       clearCache: Boolean(flags['clear-cache'])
     };
 
-    switch (command) {
-      case 'scan': {
-        const includeTransitive = Boolean(!flags['direct-only']);
-        let results: DependencyResult[] = [];
+    const targetInput = typeof flags.url === 'string' ? flags.url : undefined;
+    const targetCtx = await resolveTarget(targetInput);
 
-        await new Listr([
-          {
-            title: 'Scanning dependencies',
-            task: async () => {
-              results = await scanner.scanDependencies('./package.json', includeTransitive, scanOptions);
+    try {
+      const packageJsonPath = path.join(targetCtx.projectPath, 'package.json');
+
+      switch (command) {
+        case 'scan': {
+          const includeTransitive = Boolean(!flags['direct-only']);
+          let results: DependencyResult[] = [];
+
+          await new Listr([
+            {
+              title: `Scanning dependencies for ${targetCtx.projectPath}`,
+              task: async () => {
+                results = await scanner.scanDependencies(packageJsonPath, includeTransitive, scanOptions);
+              }
+            }
+          ]).run();
+
+          scanner.generateReport(results);
+
+          if (flags.save) {
+            const filename = typeof flags.save === 'string' ? flags.save : 'security-scan.json';
+            if (await confirmSave(filename)) {
+              scanner.saveResults(results, filename);
+            } else {
+              console.log(chalk.yellow('Save canceled.'));
             }
           }
-        ]).run();
-
-        scanner.generateReport(results);
-
-        if (flags.save) {
-          const filename = typeof flags.save === 'string' ? flags.save : 'security-scan.json';
-          if (await confirmSave(filename)) {
-            scanner.saveResults(results, filename);
-          } else {
-            console.log(chalk.yellow('Save canceled.'));
-          }
+          break;
         }
-        break;
-      }
 
-      case 'all-installed': {
-        let results: DependencyResult[] = [];
+        case 'all-installed': {
+          let results: DependencyResult[] = [];
 
-        await new Listr([
-          {
-            title: 'Scanning all installed packages',
-            task: async () => {
-              results = await scanner.scanDependencies('./package.json', true, scanOptions);
+          await new Listr([
+            {
+              title: `Scanning all installed packages for ${targetCtx.projectPath}`,
+              task: async () => {
+                results = await scanner.scanDependencies(packageJsonPath, true, scanOptions);
+              }
+            }
+          ]).run();
+
+          console.log(chalk.blue(`Total installed packages: ${results.length}`));
+          results.forEach(pkg => console.log(chalk.gray(`${pkg.package}@${pkg.currentVersion}`)));
+
+          if (flags.save) {
+            const filename = typeof flags.save === 'string' ? flags.save : 'all-installed-report.json';
+            if (await confirmSave(filename)) {
+              scanner.saveResults(results, filename);
+            } else {
+              console.log(chalk.yellow('Save canceled.'));
             }
           }
-        ]).run();
-
-        console.log(chalk.blue(`Total installed packages: ${results.length}`));
-        results.forEach(pkg => console.log(chalk.gray(`${pkg.package}@${pkg.currentVersion}`)));
-
-        if (flags.save) {
-          const filename = typeof flags.save === 'string' ? flags.save : 'all-installed-report.json';
-          if (await confirmSave(filename)) {
-            scanner.saveResults(results, filename);
-          } else {
-            console.log(chalk.yellow('Save canceled.'));
-          }
+          break;
         }
-        break;
-      }
 
-      case 'generate-report': {
-        let results: DependencyResult[] = [];
-        let filteredResults: DependencyResult[] = [];
+        case 'generate-report': {
+          let results: DependencyResult[] = [];
+          let filteredResults: DependencyResult[] = [];
 
-        await new Listr([
-          {
-            title: 'Scanning dependencies for report',
-            task: async () => {
-              results = await scanner.scanDependencies('./package.json', true, scanOptions);
+          await new Listr([
+            {
+              title: `Scanning dependencies for report (${targetCtx.projectPath})`,
+              task: async () => {
+                results = await scanner.scanDependencies(packageJsonPath, true, scanOptions);
+              }
+            },
+            {
+              title: 'Preparing vulnerable report',
+              task: () => {
+                filteredResults = scanner.filterReportResults(results);
+              }
             }
-          },
-          {
-            title: 'Preparing vulnerable report',
-            task: () => {
-              filteredResults = scanner.filterReportResults(results);
+          ]).run();
+
+          scanner.generateReport(filteredResults, { onlyVulnerable: true });
+
+          if (flags.save) {
+            const filename = typeof flags.save === 'string' ? flags.save : 'security-scan.json';
+            if (await confirmSave(filename)) {
+              scanner.saveResults(filteredResults, filename);
+            } else {
+              console.log(chalk.yellow('Save canceled.'));
             }
           }
-        ]).run();
-
-        scanner.generateReport(filteredResults, { onlyVulnerable: true });
-
-        if (flags.save) {
-          const filename = typeof flags.save === 'string' ? flags.save : 'security-scan.json';
-          if (await confirmSave(filename)) {
-            scanner.saveResults(filteredResults, filename);
-          } else {
-            console.log(chalk.yellow('Save canceled.'));
-          }
+          break;
         }
-        break;
+
+        case 'help':
+          showHelp();
+          break;
+
+        default:
+          console.error(chalk.red(`Unknown command: ${command}`));
+          showHelp();
+          process.exit(1);
       }
-
-      case 'help':
-        showHelp();
-        break;
-
-      default:
-        console.error(chalk.red(`Unknown command: ${command}`));
-        showHelp();
-        process.exit(1);
+    } finally {
+      targetCtx.cleanup();
     }
   } catch (error) {
     console.error(chalk.red('Command failed:'), error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
+
 
 export { main };
 export default Scanner;

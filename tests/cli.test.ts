@@ -40,7 +40,7 @@ describe('CLI Integration', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Scanning dependencies');
-    expect(result.stdout).toContain('REPORT');
+    expect(result.stdout).toContain('Dependency Scan Report');
   });
 });
 

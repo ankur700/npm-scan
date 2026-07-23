@@ -204,9 +204,9 @@ describe('Scanner', () => {
         return { ok: false } as Response;
       }) as unknown as typeof fetch;
 
-      const vulns = await scanner.getVulnerabilities('test-pkg', '1.0.0');
-      expect(vulns.length).toBe(1);
-      expect(vulns[0]).toEqual({
+      const vulnerabilities = await scanner.getVulnerabilities('test-pkg', '1.0.0');
+      expect(vulnerabilities.length).toBe(1);
+      expect(vulnerabilities[0]).toEqual({
         id: 'GHSA-TEST-1234',
         title: 'Test Vulnerability',
         severity: 'high',

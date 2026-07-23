@@ -3,14 +3,14 @@ import { execa } from 'execa';
 import path from 'path';
 
 describe('CLI Integration', () => {
-  const binPath = path.resolve(__dirname, '../bin/npm-check.js');
+  const binPath = path.resolve(__dirname, '../bin/npm-scan.js');
 
   test('runs help command via CLI entry point', async () => {
     const result = await execa('node', [binPath, 'help']);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('npm-check');
-    expect(result.stdout).toContain('Usage: npm-check <command> [options]');
+    expect(result.stdout).toContain('npm-scan');
+    expect(result.stdout).toContain('Usage: npm-scan');
     expect(result.stdout).toContain('scan');
     expect(result.stdout).toContain('all-installed');
     expect(result.stdout).toContain('generate-report');
@@ -31,6 +31,16 @@ describe('CLI Integration', () => {
     const result = await execa('node', [binPath, '--help']);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Usage: npm-check <command> [options]');
+    expect(result.stdout).toContain('Usage: npm-scan');
+  });
+
+  test('scans specified local target directory via --url option', async () => {
+    const projectDir = path.resolve(__dirname, '..');
+    const result = await execa('node', [binPath, 'scan', '--url', projectDir, '--direct-only']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Scanning dependencies');
+    expect(result.stdout).toContain('REPORT');
   });
 });
+

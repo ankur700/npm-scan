@@ -9,19 +9,79 @@ import {
   parseYarnLockfile,
   parseBunLockfile,
   parseCliArgs,
+  isGithubUrl,
+  normalizeGithubUrl,
+  resolveTarget
 } from '../src/utils';
 
 describe('utils', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-check-utils-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-scan-utils-test-'));
   });
 
   afterEach(() => {
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+
+  describe('isGithubUrl & normalizeGithubUrl', () => {
+    test('identifies GitHub repository URLs correctly', () => {
+      expect(isGithubUrl('https://github.com/owner/repo')).toBe(true);
+      expect(isGithubUrl('https://github.com/owner/repo.git')).toBe(true);
+      expect(isGithubUrl('git@github.com:owner/repo.git')).toBe(true);
+      expect(isGithubUrl('github.com/owner/repo')).toBe(true);
+
+      expect(isGithubUrl('file:///path/to/project')).toBe(false);
+      expect(isGithubUrl('/path/to/project')).toBe(false);
+      expect(isGithubUrl('./relative/path')).toBe(false);
+    });
+
+    test('normalizes GitHub URLs', () => {
+      expect(normalizeGithubUrl('github.com/owner/repo')).toBe('https://github.com/owner/repo');
+      expect(normalizeGithubUrl('https://github.com/owner/repo')).toBe('https://github.com/owner/repo');
+      expect(normalizeGithubUrl('git@github.com:owner/repo.git')).toBe('git@github.com:owner/repo.git');
+    });
+  });
+
+  describe('resolveTarget', () => {
+    test('resolves local directory path with package.json', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+
+      const ctx = await resolveTarget(tmpDir);
+      expect(ctx.isTemporary).toBe(false);
+      expect(ctx.projectPath).toBe(path.resolve(tmpDir));
+      ctx.cleanup();
+    });
+
+    test('resolves file:// URL correctly', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+
+      const fileUrl = `file://${tmpDir}`;
+      const ctx = await resolveTarget(fileUrl);
+      expect(ctx.isTemporary).toBe(false);
+      expect(ctx.projectPath).toBe(path.resolve(tmpDir));
+      ctx.cleanup();
+    });
+
+    test('throws error if local directory does not exist', async () => {
+      const nonExistentPath = path.join(tmpDir, 'does-not-exist');
+      expect(resolveTarget(nonExistentPath)).rejects.toThrow('Local directory does not exist');
+    });
+
+    test('throws error if path is a file, not a directory', async () => {
+      const filePath = path.join(tmpDir, 'file.txt');
+      fs.writeFileSync(filePath, 'hello');
+      expect(resolveTarget(filePath)).rejects.toThrow('Path is not a directory');
+    });
+
+    test('throws error if directory does not contain package.json', async () => {
+      const emptySubDir = path.join(tmpDir, 'empty-dir');
+      fs.mkdirSync(emptySubDir);
+      expect(resolveTarget(emptySubDir)).rejects.toThrow('No package.json found in directory');
+    });
   });
 
   describe('detectPackageManager', () => {
@@ -170,6 +230,22 @@ packages:
       expect(result.flags).toEqual({});
     });
 
+    test('parses --url and -u flags correctly', () => {
+      const result1 = parseCliArgs(['scan', '--url', 'https://github.com/facebook/react']);
+      expect(result1.command).toBe('scan');
+      expect(result1.flags.url).toBe('https://github.com/facebook/react');
+
+      const result2 = parseCliArgs(['scan', '-u', '/path/to/repo']);
+      expect(result2.command).toBe('scan');
+      expect(result2.flags.url).toBe('/path/to/repo');
+    });
+
+    test('parses positional GitHub URL as scan command target', () => {
+      const result = parseCliArgs(['https://github.com/facebook/react']);
+      expect(result.command).toBe('scan');
+      expect(result.flags.url).toBe('https://github.com/facebook/react');
+    });
+
     test('parses --direct-only and --full flags', () => {
       const result1 = parseCliArgs(['scan', '--direct-only']);
       expect(result1.command).toBe('scan');
@@ -216,3 +292,4 @@ packages:
     });
   });
 });
+

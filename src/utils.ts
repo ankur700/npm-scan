@@ -3,20 +3,117 @@ import figlet from 'figlet';
 import inquirer from 'inquirer';
 import fs from 'fs';
 import path from 'path';
-import type { DependenciesMap, PackageManager } from './types';
+import os from 'os';
+import { fileURLToPath } from 'url';
+import { execa } from 'execa';
+import type { DependenciesMap, PackageManager, TargetContext } from './types';
+
 
 type PromptCommand = 'scan' | 'all-installed' | 'generate-report' | 'help';
 
 interface PromptAnswers {
   command: PromptCommand;
+  target?: string;
   clearCache?: boolean;
   directOnly?: boolean;
   saveReport?: boolean;
   saveFile?: string;
 }
 
+export function isGithubUrl(target: string): boolean {
+  if (!target || typeof target !== 'string') return false;
+  const trimmed = target.trim();
+  if (trimmed.startsWith('file://')) return false;
+  if (/^(https?:\/\/)?(www\.)?github\.com\/[\w.-]+\/[\w.-]+/i.test(trimmed)) return true;
+  if (/^git@github\.com:[\w.-]+\/[\w.-]+(\.git)?$/i.test(trimmed)) return true;
+  return false;
+}
+
+export function normalizeGithubUrl(target: string): string {
+  const trimmed = target.trim();
+  if (trimmed.startsWith('git@github.com:')) {
+    return trimmed;
+  }
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
+export async function resolveTarget(target?: string): Promise<TargetContext> {
+  const targetStr = (target || '.').trim();
+
+  if (isGithubUrl(targetStr)) {
+    const gitUrl = normalizeGithubUrl(targetStr);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-scan-repo-'));
+    console.log(chalk.blue(`Cloning GitHub repository ${gitUrl}...`));
+
+    try {
+      await execa('git', ['clone', '--depth', '1', gitUrl, tempDir]);
+    } catch (error) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+      throw new Error(`Failed to clone GitHub repository from ${gitUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const packageJsonPath = path.join(tempDir, 'package.json');
+    if (!fs.existsSync(packageJsonPath)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
+      throw new Error(`No package.json found in cloned repository: ${gitUrl}`);
+    }
+
+    return {
+      projectPath: tempDir,
+      isTemporary: true,
+      cleanup: () => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (err) {
+          console.warn(`Warning: Could not remove temporary directory ${tempDir}: ${err}`);
+        }
+      }
+    };
+  }
+
+  let localPath = targetStr;
+  if (localPath.startsWith('file://')) {
+    try {
+      localPath = fileURLToPath(localPath);
+    } catch (err) {
+      throw new Error(`Invalid file URL '${targetStr}': ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else if (localPath.startsWith('~')) {
+    localPath = path.join(os.homedir(), localPath.slice(1));
+  }
+
+  const resolvedPath = path.resolve(localPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Local directory does not exist: ${resolvedPath}`);
+  }
+
+  const stats = fs.statSync(resolvedPath);
+  if (!stats.isDirectory()) {
+    throw new Error(`Path is not a directory: ${resolvedPath}`);
+  }
+
+  const packageJsonPath = path.join(resolvedPath, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`No package.json found in directory: ${resolvedPath}`);
+  }
+
+  return {
+    projectPath: resolvedPath,
+    isTemporary: false,
+    cleanup: () => {}
+  };
+}
+
 export function renderBanner(): void {
-  const banner = figlet.textSync('npm-check', { horizontalLayout: 'default' });
+  const banner = figlet.textSync('npm-scan', { horizontalLayout: 'default' });
   console.log(chalk.cyanBright(banner));
   console.log(chalk.gray('Interactive dependency security scanner\n'));
 }
@@ -33,6 +130,13 @@ export async function promptForCommand(): Promise<{ command: string; flags: Reco
         { name: 'Generate report for vulnerable packages', value: 'generate-report' as PromptCommand },
         { name: 'Show help', value: 'help' as PromptCommand }
       ]
+    },
+    {
+      type: 'input' as const,
+      name: 'target' as const,
+      message: 'Enter GitHub repository URL or local project directory path (leave empty for current directory):',
+      default: '.',
+      when: (answers: PromptAnswers) => answers.command !== 'help'
     },
     {
       type: 'confirm' as const,
@@ -76,6 +180,9 @@ export async function promptForCommand(): Promise<{ command: string; flags: Reco
   const answers = await inquirer.prompt<PromptAnswers>(questions as unknown as any);
 
   const flags: Record<string, string | boolean> = {};
+  if (answers.target && answers.target.trim() !== '.' && answers.target.trim() !== '') {
+    flags.url = answers.target.trim();
+  }
   if (answers.clearCache) flags['clear-cache'] = true;
   if (answers.directOnly) flags['direct-only'] = true;
   if (answers.saveReport) flags.save = answers.saveFile || (answers.command === 'all-installed' ? 'all-installed-report.json' : 'security-scan.json');
@@ -238,9 +345,18 @@ export function parseCliArgs(argv: string[]): { command: string; flags: Record<s
   const flags: Record<string, string | boolean> = {};
   let command = 'scan';
 
+  const knownCommands = ['scan', 'all-installed', 'generate-report', 'help'];
+
   const firstArg = args[0];
   if (firstArg !== undefined && !firstArg.startsWith('-')) {
-    command = args.shift() as string;
+    if (knownCommands.includes(firstArg)) {
+      command = args.shift() as string;
+    } else if (isGithubUrl(firstArg) || firstArg.startsWith('file://') || fs.existsSync(firstArg)) {
+      command = 'scan';
+      flags.url = args.shift() as string;
+    } else {
+      command = args.shift() as string;
+    }
   }
 
   while (args.length > 0) {
@@ -267,8 +383,23 @@ export function parseCliArgs(argv: string[]): { command: string; flags: Record<s
       }
     } else if (token.startsWith('--save=')) {
       flags.save = token.slice('--save='.length);
+    } else if (token === '--url' || token === '-u' || token === '--path' || token === '-p') {
+      const next = args[0];
+      if (next !== undefined && !next.startsWith('-')) {
+        flags.url = args.shift() as string;
+      }
+    } else if (token.startsWith('--url=')) {
+      flags.url = token.slice('--url='.length);
+    } else if (token.startsWith('-u=')) {
+      flags.url = token.slice('-u='.length);
+    } else if (token.startsWith('--path=')) {
+      flags.url = token.slice('--path='.length);
+    } else if (token.startsWith('-p=')) {
+      flags.url = token.slice('-p='.length);
     } else if (token === '--help' || token === '-h') {
       flags.help = true;
+    } else if (!token.startsWith('-') && !flags.url) {
+      flags.url = token;
     }
   }
 
@@ -276,21 +407,24 @@ export function parseCliArgs(argv: string[]): { command: string; flags: Record<s
 }
 
 export function showHelp(): void {
-  console.log('Usage: npm-check <command> [options]\n');
+  console.log('Usage: npm-scan [command] [options] [url|path]\n');
   console.log('Commands:');
-  console.log('  scan [--direct-only|--full] [--clear-cache] [--cache-file <path>]');
-  console.log('                                   Scan dependencies');
-  console.log('  all-installed                    List all installed packages');
-  console.log('  generate-report [--save [file]] [--clear-cache] [--cache-file <path>]');
-  console.log('                                   Scan and generate a report, optionally saving it');
+  console.log('  scan [--url <url|path>] [--direct-only|--full] [--clear-cache] [--cache-file <path>]');
+  console.log('                                   Scan dependencies for a project');
+  console.log('  all-installed [--url <url|path>] List all installed packages');
+  console.log('  generate-report [--url <url|path>] [--save [file]] [--clear-cache]');
+  console.log('                                   Scan and generate a report for vulnerable packages');
   console.log('  help                             Show help');
   console.log('\nOptions:');
+  console.log('  --url, -u <url|path>                GitHub repo URL or local project directory path');
+  console.log('  --path, -p <path>                   Local project directory path or file URL');
   console.log('  --clear-cache, --invalidate-cache   Clear previous cached scan results');
-  console.log('  --cache-file <path>                 Use a custom cache file instead of .npm-check-cache.json');
+  console.log('  --cache-file <path>                 Use a custom cache file instead of .npm-scan-cache.json');
   console.log('\nExamples:');
-  console.log('  npm-check scan --direct-only');
-  console.log('  npm-check scan --full --clear-cache');
-  console.log('  npm-check all-installed');
-  console.log('  npm-check generate-report --save security-scan.json');
-  console.log('  npm-check scan --cache-file .cache/npm-check.json');
+  console.log('  npm-scan scan --url https://github.com/expressjs/express');
+  console.log('  npm-scan scan --url /path/to/project');
+  console.log('  npm-scan scan --url file:///path/to/project');
+  console.log('  npm-scan scan --direct-only');
+  console.log('  npm-scan generate-report --url https://github.com/facebook/react --save report.json');
 }
+

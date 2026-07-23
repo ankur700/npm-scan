@@ -56,6 +56,7 @@ export interface DependencyResult {
   isDefault: boolean;
   vulnerabilities: Advisory[];
   vulnerabilityCount: number;
+  dependsOnVulnerable?: string[];
 }
 
 export interface ScanCacheEntry {
@@ -79,3 +80,10 @@ export interface ScanReport {
   };
   results: DependencyResult[];
 }
+
+export interface TargetContext {
+  projectPath: string;
+  isTemporary: boolean;
+  cleanup: () => void;
+}
+

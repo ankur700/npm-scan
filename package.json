@@ -1,24 +1,24 @@
 {
-  "name": "npm-check",
+  "name": "npm-scan",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "entry point": "src/index.ts",
   "bin": {
-    "npm-check": "./bin/npm-check.js"
+    "npm-scan": "./bin/npm-scan.js"
   },
   "files": ["dist", "bin"],
   "scripts": {
       "build": "bun build ./src/index.ts --outdir ./dist --target node",
-      "check": "node ./bin/npm-check.js",
+      "scan": "node ./bin/npm-scan.js",
       "test": "bun test",
       "prepare": "bun run build",
       "prepublishOnly": "bun run build"
   },
   "keywords" : [
     "npm",
-    "check",
+    "scan",
     "dependencies",
     "vulnerabilities",
     "security"
